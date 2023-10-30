@@ -3,187 +3,159 @@ use strict;
 
 print "Create AGR SimpleMine source data table ...\n";
 
-my @spe = ("HUMAN", "MGI", "RGD", "ZFIN", "FB", "WB", "SGD");
-my %taxidSpe = ("taxid:9606" => "HUMAN", 
-	       "taxid:10090" => "MGI", 
-	       "taxid:10116" => "RGD", 
-	       "taxid:7955" => "ZFIN", 
-	       "taxid:7227" => "FB", 
-	       "taxid:6239" => "WB", 
-	       "taxid:559292" => "SGD");
+my @spe = ("HUMAN", "MGI", "RGD", "ZFIN", "FB", "WB", "SGD", "XBXL", "XBXT");
+my %taxidSpe = ("NCBITaxon:9606" => "HUMAN", 
+	        "NCBITaxon:10090" => "MGI", 
+	        "NCBITaxon:10116" => "RGD", 
+	        "NCBITaxon:7955" => "ZFIN", 
+	        "NCBITaxon:7227" => "FB", 
+		"NCBITaxon:6239" => "WB",
+		"NCBITaxon:8355" => "XBXL",
+#		"NCBITaxon:2697049" => "XBXT",		
+		"NCBITaxon:8364" => "XBXT",		
+	        "NCBITaxon:559292" => "SGD");
 my $s; #species name
-
 my ($line, $columns);
 my @tmp;
-my $i; #this index geneList
-my $totalGenes;
+
+#-----------Get Gene Symbols (long names like MAP-Homologous Protein)-------
+open (LNAM, "/home/wen/agrSimpleMine/src/nameFile") || die "can't open nameFile!";
+my ($geneid, $mod, $modID, $taxid, $genename, $longname, $synonym);
+my %gModID; #Gene ID in its own Model Organism Database
+my %gLName; #Long names for each gene id
+my %gName; #public name for each gene id
+my %gSpe; #species for each gene id
+my %gSYNO; #synonym ids
 my @geneList;
-my ($geneid, $genename, $des, $taxid, $entrez);
+my $i = 0; #this index geneList
+my $totalSynGene = 0;
+my @findSyn;
+
+while ($line = <LNAM>) {
+    next unless ($line =~ /NCBITaxon/);
+    next unless !($line =~ /NCBITaxon:2697049/); 
+    chomp ($line);
+    @findSyn = ();
+    @findSyn = split /\t/, $line;
+    $columns = @findSyn;
+    if ($columns > 2) {	#there is a gene name
+	$geneid = $findSyn[0];
+	$geneList[$i] = $geneid; #add this gene to gene list.
+	$i++;
+
+	($mod, $modID) = split ':', $geneid;
+	$gModID{$geneid} = $modID;
+	
+	$taxid = $findSyn[1];
+	if ($taxidSpe{$taxid}) {
+	    $s = $taxidSpe{$taxid};
+	    $gSpe{$geneid} = $s;
+	} else {
+	    print "ERROR! Cannot find species for $taxid!\n";
+	}
+    	
+	$genename = $findSyn[2];
+	$gName{$geneid} = $genename; 
+
+	if ($columns > 3) { #there is a long name
+	    $longname = $findSyn[3];    
+	    $gLName{$geneid} = $longname;
+	}
+    }
+}
+close (LNAM);
+print "$i genes identified from the Gene Name and Symol file.\n";
+#----------Done getting Gene Symbol --------------
+
+
+#--------------Get Synonyms for Gene Names --------------
+open (SYNO, "/home/wen/agrSimpleMine/src/synonymFile") || die "can't open synonymFile!";
+$line = <SYNO>;
+
+while ($line = <SYNO>) {
+    next unless ($line =~ /NCBITaxon/);
+    next unless !($line =~ /NCBITaxon:2697049/); 
+    chomp ($line);
+    @findSyn = ();
+    @findSyn = split /\t/, $line;
+    $columns = @findSyn;
+    next unless ($columns == 3); 
+    $geneid = $findSyn[0];
+    $synonym = $findSyn[2]; 
+    if ($gSYNO{$geneid}) {
+       $gSYNO{$geneid} = join " | ", $gSYNO{$geneid}, $synonym;
+    } else {
+       $gSYNO{$geneid} = $synonym;
+       $totalSynGene++;
+    }
+}
+close (SYNO);
+print "$totalSynGene genes have synonyms.\n";
+#-------------Done with Gene Name Synonyms -------------
+
+
+#---------------- Get Genomic Resource IDs -----------------------------------
+open (XREF, "/home/wen/agrSimpleMine/src/xrefFile") || die "can't open xrefFile!";
+
+my %gUniPro; #UniProtKB ID for gene ID
+my %gNCBI; #NCBI ID for gene ID
+my %gPANTHER; #PANTHER ID for gene ID
+my %gENSEM; #ENSEMBL ID for gene ID
+my %gRefSeq; #RefSeq ID for gene ID
+my %ncbiGene; #Gene ID for NCBI ID
+my %uniproGene; #Gene ID for UniProtKB ID
+my %refseqGene; #Gene ID for RefSeq ID
+my ($resource, $rID);
+
+while ($line = <XREF>) {
+    chomp ($line);
+    @tmp = ();
+    @tmp = split /\t/, $line;
+    $columns = @tmp;
+    next unless ($columns == 3);
+    $geneid = $tmp[0];
+
+	if ($tmp[2] =~ /^UniProtKB:/) {
+	    ($resource, $rID) = split ":", $tmp[2];
+	    if ($gUniPro{$geneid}) {
+		$gUniPro{$geneid} = join " | ",  $gUniPro{$geneid}, $rID;
+	    } else {
+		$gUniPro{$geneid} = $rID;
+		$uniproGene{$rID} = $geneid;
+	    }
+	} elsif ($tmp[2] =~ /^NCBI_Gene:/) {
+	    ($resource, $rID) = split ":", $tmp[2];
+	    $gNCBI{$geneid} = $rID;
+	    $ncbiGene{$rID} = $geneid;
+	} elsif ($tmp[2] =~ /ENSEMBL:/) {
+	    ($resource, $rID) = split ":", $tmp[2];
+	    $gENSEM{$geneid} = $rID;
+	} elsif ($tmp[2] =~ /PANTHER:/) {
+	    ($resource, $rID) = split ":", $tmp[2];
+	    $gPANTHER{$geneid} = $rID;
+	} elsif ($tmp[2] =~ /RefSeq:/) {
+	    ($resource, $rID) = split ":", $tmp[2];
+	    $gRefSeq{$geneid} = $rID;
+	    $refseqGene{$rID} = $geneid;
+	}    
+}    
+close (XREF);
+#---------------------- Done with Cross Reference  --------------
+
+
 my %duplicateInfo; #check if the information was aready taken;
 my $checkstring;
 
-#---- Screen interactor files, get entrez ID - public name table ---
-my %entrezName; #given NCBI entrez ID, find the gene name
-my %nameEntrez; #given the gene name, find the NCBI entrez ID
-my @stuff;
-my $totalEntrezGenes = 0;
-my $speGeneName; #a unique name combining species taxid and gene name
-    
-open (MINT, "molIntFile") || die "can't open molIntFile!";
-while ($line = <MINT>) {
-    chomp ($line);
-    next unless ($line =~ /^entrez/);    
-    @tmp = ();
-    @tmp = split /\t/, $line;
-
-    @stuff= ();
-    ($stuff[0], $entrez) = split ":", $tmp[0];
-    ($stuff[0], $stuff[1], $genename) = split ":", $tmp[2];
-    $taxid = $tmp[9];
-    if ($taxidSpe{$taxid}) {
-	next unless !($entrezName{$entrez});
-	$entrezName{$entrez} = $genename;
-	$speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	$nameEntrez{$speGeneName} = $entrez;
-	$totalEntrezGenes++;
-    } else {
-	print "ERROR! Cannot find species info for $taxid!\n"
-    }
-
-    @stuff= ();
-    ($stuff[0], $entrez) = split ":", $tmp[1];
-    ($stuff[0], $stuff[1], $genename) = split ":", $tmp[3];
-    $taxid = $tmp[9];
-    if ($taxidSpe{$taxid}) {
-	next unless !($entrezName{$entrez});
-	$entrezName{$entrez} = $genename;
-	$speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	$nameEntrez{$speGeneName} = $entrez;
-	$totalEntrezGenes++;
-    } else {
-	print "ERROR! Cannot find species info for $taxid!\n"
-    }
-       
-}
-close (MINT);
-print "Found a total of $totalEntrezGenes Entrez gene names from molIntFile.\n";
-
-     
-open (GINT, "geneticIntFile") || die "can't open geneticIntFile!";
-while ($line = <GINT>) {
-    chomp ($line);
-    next unless ($line =~ /^entrez/);    
-    @tmp = ();
-    @tmp = split /\t/, $line;
-
-    @stuff= ();
-    ($stuff[0], $entrez) = split ":", $tmp[0];
-    ($stuff[0], $stuff[1], $genename) = split ":", $tmp[2];
-    $taxid = $tmp[9];
-    if ($taxidSpe{$taxid}) {
-	next unless !($entrezName{$entrez});
-	$entrezName{$entrez} = $genename;
-	$speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	$nameEntrez{$speGeneName} = $entrez;
-	$totalEntrezGenes++;
-    } else {
-	print "ERROR! Cannot find species info for $taxid!\n"
-    }
-
-    @stuff= ();
-    ($stuff[0], $entrez) = split ":", $tmp[1];
-    ($stuff[0], $stuff[1], $genename) = split ":", $tmp[3];
-    $taxid = $tmp[9];
-    if ($taxidSpe{$taxid}) {
-	next unless !($entrezName{$entrez});
-	$entrezName{$entrez} = $genename;
-	$speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	$nameEntrez{$speGeneName} = $entrez;
-	$totalEntrezGenes++;
-    } else {
-	print "ERROR! Cannot find species info for $taxid!\n"
-    }
-       
-}
-close (GINT);
-print "Found a total of $totalEntrezGenes Entrez gene names from molIntFile and geneticIntFile.\n";
-   
-#---------------- Get Gene Description -----------------------------------
-open (DES, "desFile") || die "can't open desFile!";
-$i = 0;
-
-my %gName; #public name for each gene id
-my %gDes; #Description for each gene id
-my %gSpe; #species for each gene id
-my %speGeneNameID; #given the species and gene name $speGeneName, find the AGR gene id
-my $totalHumanGene = 0;
-my $totalMGIGene = 0;
-my $totalRGDGene = 0;
-my $totalZFINGene = 0;
-my $totalFBGene = 0;
-my $totalWBGene = 0;
-my $totalSGDGene = 0;
-
-while ($line = <DES>) {
-	chomp ($line);
-	if (($line =~ /^HGNC:/)||($line =~ /^MGI:/)||($line =~ /^RGD:/)||($line =~ /^ZFIN:/) ||($line =~ /^FB:/)||($line =~ /^WB:/)||($line =~ /^SGD:/)) {
-	    ($geneid, $genename) = split /\s+/, $line;
-	    $gName{$geneid} = $genename;
-	    $geneList[$i] = $geneid;
-	    $i++;
-	    if ($line =~ /^HGNC:/) { 
-		$totalHumanGene++;
-                $gSpe{$geneid} = "HUMAN";
-	    } elsif ($line =~ /^MGI:/) { 
-		$totalMGIGene++; 
-                $gSpe{$geneid} = "MGI";
-		
-	    } elsif ($line =~ /^RGD:/) { 
-		$totalRGDGene++;
-                $gSpe{$geneid} = "RGD";		
-	    } elsif ($line =~ /^ZFIN:/) { 
-		$totalZFINGene++; 
-                $gSpe{$geneid} = "ZFIN";
-	    } elsif ($line =~ /^FB:/) { 
-		$totalFBGene++; 
-                $gSpe{$geneid} = "FB";
-	    } elsif ($line =~ /^WB:/) { 
-		$totalWBGene++; 
-                $gSpe{$geneid} = "WB";
-	    } elsif ($line =~ /^SGD:/) { 
-		$totalSGDGene++; 
-                $gSpe{$geneid} = "SGD";
-	    }		
-	    $speGeneName = join ":", $gSpe{$geneid}, $genename;
-	    if ($speGeneNameID{$speGeneName}) {
-		if ($speGeneNameID{$speGeneName} ne $geneid) {
-		    print "Warning! $geneid $speGeneName already has a different geneid $speGeneNameID{$speGeneName}!\n";
-		}
-	    } else {
-		$speGeneNameID{$speGeneName} = $geneid;
-	    }
-	} elsif ($line ne "") {
-	    $gDes{$geneid} = $line;
-	} 
-}    
-$totalGenes = $i;
-close (DES);
-print "$totalGenes genes found with description\n";
-#---------------------- Done with Gene Description --------------
-
-
 #------------ Get Genetic Interaction -----------------
 my %gGeneticInt; #genetic interaction for each gene
-open (GINT, "geneticIntFile") || die "can't open geneticIntFile!";
-#open (GINT, "humanGeneticIntFile") || die "can't open humanGeneticIntFile!";
-#open (MINT, "molIntFile") || die "can't open molIntFile!";
+open (GINT, "/home/wen/agrSimpleMine/src/geneticIntFile") || die "can't open geneticIntFile!";
 my ($gInteractor, $intA, $intB, $tempstring);
 my @splitName;
 
 my $totalGeneGInt = 0; 
 while ($line = <GINT>) {
     chomp ($line);
-    next unless (($line =~ /^wormbase/) || ($line =~ /^flybase/)||($line =~ /^entrez/));
+    next unless (($line =~ /^wormbase/) || ($line =~ /^flybase/)||($line =~ /^entrez/)||($line =~ /^uniprot/));
 
     @tmp = ();
     @tmp = split /\t/, $line;
@@ -209,67 +181,40 @@ while ($line = <GINT>) {
 		$splitName[0] = "WB";
        }	
        $intB = join ":", @splitName;
-    } elsif ($line =~ /^entrez/) {
-	#biogrid data
-	#next unless ($line =~ //);
+    } elsif (($line =~ /^entrez/)||($line =~ /^uniprot/)) {
 	# find $intA
-	@stuff= ();
-	@stuff = split /\|/, $tmp[2];
-	$tempstring = $stuff[1];
-	@stuff= ();
-	@stuff = split ":", $tempstring;	
-	$genename = $stuff[1];
-	$taxid = $tmp[9];
-	if ($taxidSpe{$taxid}) {
-	    #next unless !($entrezName{$entrez});
-	    #$entrezName{$entrez} = $genename;
-	    $speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	    if ($speGeneNameID{$speGeneName}) {
-		$geneid = $speGeneNameID{$speGeneName};
-		$intA = $geneid;
-	    } else {
-		#print "ERROR! Cannot find gene id for $speGeneName!\n";
-	    }
+	($resource, $rID) = split ':', $tmp[0];
+	if ($resource =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intA = $ncbiGene{$rID};
+	    #print "NCBI:$rID mapped to $intA\n";
 	} else {
-	    print "ERROR! Cannot find species info for $taxid!\n"
+	    print "$rID\n";
+	    next unless ($uniproGene{$rID});	
+	    $intA = $uniproGene{$rID};	    
 	}
-
+	    
 	# find $intB
-	@stuff= ();
-	@stuff = split /\|/, $tmp[3];
-	$tempstring = $stuff[1];
-	@stuff= ();
-	@stuff = split ":", $tempstring;	
-	$genename = $stuff[1];
-	$taxid = $tmp[10];
-	if ($taxidSpe{$taxid}) {
-	    #next unless !($entrezName{$entrez});
-	    #$entrezName{$entrez} = $genename;
-	    $speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	    if ($speGeneNameID{$speGeneName}) {
-		$geneid = $speGeneNameID{$speGeneName};
-		$intB = $geneid;
-	    } else {
-		#print "ERROR! Cannot find gene id for $speGeneName!\n";
-	    }
+	($resource, $rID) = split ':', $tmp[1];
+	if ($line =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intB = $ncbiGene{$rID};
 	} else {
-	    print "ERROR! Cannot find species info for $taxid!\n"
-	}	
+	    next unless ($uniproGene{$rID});	
+	    $intB = $uniproGene{$rID};	    
+	}
     }
     #----- done converting -------
 
-    #------ start to process interaction data -----
-    
+    #------ start to process interaction data -----    
     next unless (($intA ne "")&&($intB ne ""));
     $geneid = $intA;
     $gInteractor = $intB;
     $checkstring = join "gInt", $geneid, $gInteractor;
     next unless !($duplicateInfo{$checkstring}); 
-    #if  ($geneid =~ /^FB/) {
-    #	print "$checkstring\n";
-    #}
     next unless $gName{$gInteractor}; #must be able to find interactor name
     $tempstring = join ":", $gInteractor, $gName{$gInteractor};
+    #$tempstring = $gInteractor;
     if ($gGeneticInt{$geneid}) {
        $gGeneticInt{$geneid} =  join " \| ",  $gGeneticInt{$geneid}, $tempstring; 
     } else {
@@ -285,6 +230,7 @@ while ($line = <GINT>) {
     next unless !($duplicateInfo{$checkstring});
     next unless $gName{$gInteractor}; #must be able to find interactor name
     $tempstring = join ":", $gInteractor, $gName{$gInteractor};
+    #$tempstring = $gInteractor;
     if ($gGeneticInt{$geneid}) {
        $gGeneticInt{$geneid} =  join " \| ",  $gGeneticInt{$geneid}, $tempstring; 
     } else {
@@ -302,14 +248,14 @@ print "Found Genetic interaction info for $totalGeneGInt genes.\n";
 
 #------------ Get Molecular Interaction -----------------
 my %gMolInt; #molecular interaction for each gene
-open (MINT, "molIntFile") || die "can't open molIntFile!";
+open (MINT, "/home/wen/agrSimpleMine/src/molIntFile") || die "can't open molIntFile!";
 my $mInteractor;
 
 my $totalGeneMInt = 0;
 
 while ($line = <MINT>) {
     chomp ($line);
-    next unless (($line =~ /^wormbase/) || ($line =~ /^flybase/)||($line =~ /^entrez/));
+    next unless (($line =~ /^wormbase/) || ($line =~ /^flybase/)||($line =~ /^entrez/)||($line =~ /^uniprot/));
 
     @tmp = ();
     @tmp = split /\t/, $line;
@@ -335,53 +281,34 @@ while ($line = <MINT>) {
 		$splitName[0] = "WB";
        }	
        $intB = join ":", @splitName;
-    } elsif ($line =~ /^entrez/) {
-	#biogrid data
-	#next unless ($line =~ //);
-	# find $intA
-	@stuff= ();
-	@stuff = split /\|/, $tmp[2];
-	$tempstring = $stuff[1];
-	@stuff= ();
-	@stuff = split ":", $tempstring;	
-	$genename = $stuff[1];
-	$taxid = $tmp[9];
-	if ($taxidSpe{$taxid}) {
-	    #next unless !($entrezName{$entrez});
-	    #$entrezName{$entrez} = $genename;
-	    $speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	    if ($speGeneNameID{$speGeneName}) {
-		$geneid = $speGeneNameID{$speGeneName};
-		$intA = $geneid;
-	    } else {
-		#print "ERROR! Cannot find gene id for $speGeneName!\n";
-	    }
-	} else {
-	    print "ERROR! Cannot find species info for $taxid!\n"
-	}
 
-	# find $intB
-	@stuff= ();
-	@stuff = split /\|/, $tmp[3];
-	$tempstring = $stuff[1];
-	@stuff= ();
-	@stuff = split ":", $tempstring;	
-	$genename = $stuff[1];
-	$taxid = $tmp[10];
-	if ($taxidSpe{$taxid}) {
-	    #next unless !($entrezName{$entrez});
-	    #$entrezName{$entrez} = $genename;
-	    $speGeneName = join ":", $taxidSpe{$taxid}, $genename;
-	    if ($speGeneNameID{$speGeneName}) {
-		$geneid = $speGeneNameID{$speGeneName};
-		$intB = $geneid;
-	    } else {
-		#print "ERROR! Cannot find gene id for $speGeneName!\n";
-	    }
+    } elsif (($line =~ /^entrez/) || ($line =~ /^uniprot/)) {
+	# find $intA
+	($resource, $rID) = split ':', $tmp[0];
+	if ($line =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intA = $ncbiGene{$rID};
 	} else {
-	    print "ERROR! Cannot find species info for $taxid!\n"
-	}	
-    }
+	   # if  ($uniproGene{$rID}) {
+		#do nothing
+	   # } else {
+	   #	print "Cannot find gene id for Uniprot $rID!\n";
+	   # }
+	    next unless ($uniproGene{$rID});	
+	    $intA = $uniproGene{$rID};	    
+	    #print "UniProtKB:$rID mapped to $intA\n";
+	}
+	    
+	# find $intB
+	($resource, $rID) = split ':', $tmp[1];
+	if ($line =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intB = $ncbiGene{$rID};
+	} else {
+	    next unless ($uniproGene{$rID});	
+	    $intB = $uniproGene{$rID};	    
+	}
+    } 
     #----- done converting -------
 
     #------ start to process interaction data -----
@@ -396,6 +323,7 @@ while ($line = <MINT>) {
     #}
     next unless $gName{$mInteractor}; #must be able to find interactor name
     $tempstring = join ":", $mInteractor, $gName{$mInteractor};
+    #$tempstring = $mInteractor;
     if ($gMolInt{$geneid}) {
        $gMolInt{$geneid} =  join " \| ",  $gMolInt{$geneid}, $tempstring; 
     } else {
@@ -404,13 +332,13 @@ while ($line = <MINT>) {
     }    
     $duplicateInfo{$checkstring} = 1; #record this pair of genetic interaction
 
-
     $geneid = $intB;
     $mInteractor = $intA;  
     $checkstring = join "mInt", $geneid, $mInteractor;
     next unless !($duplicateInfo{$checkstring});
     next unless $gName{$mInteractor}; #must be able to find interactor name
     $tempstring = join ":", $mInteractor, $gName{$mInteractor};
+    #$tempstring = $mInteractor;
     if ($gMolInt{$geneid}) {
        $gMolInt{$geneid} =  join " \| ",  $gMolInt{$geneid}, $tempstring; 
     } else {
@@ -426,38 +354,74 @@ print "Found Molecular Interaction info for $totalGeneMInt genes.\n";
 
 
 
-
 #----- print the source data table -------------
-open (NAM, ">GeneNameDictionary.csv") || die "cannot open GeneName.csv!\n";
-print NAM "AGR Gene ID\tAGR Gene Name\tSpecies\tEntrez ID\n";
+#open (NAM, ">GeneNameDictionary.csv") || die "cannot open GeneNameDictionary.csv!\n";
+#print NAM "AGR Gene ID\tAGR Gene Name\tSpecies\tEntrez ID\n";
+#print NAM "AGR Gene ID\tSpecies\tGene Name\tGene Symbol\tNCBI\tUniProt\tENSEMBL\tPANTHER\n";
 
-open (OUT, ">Interaction.csv") || die "cannot open SimpleMineSourceData.csv!\n";
-print OUT "AGR Gene ID\tGenetic Interaction\tMolecular\/Physical Interaction\n";
+open (OUT, ">Interaction.csv") || die "cannot open Interaction.csv!\n";
+print OUT "AGR Gene ID\tMOD Gene ID\tGene Name\tGene Symbol\tSpecies\tNCBI ID\tEnsembl ID\tUniprot ID\tPanther ID\tRefSeq ID\tSynonym\tGenetic Interaction\tMolecular\/Physical Interaction\n";
 
 my ($gIntDes, $mIntDes);
+my ($uniproID, $ncbiID, $pantherID, $ensemblID, $refseqID);
 
 foreach $geneid (@geneList) {
-    next unless ($gName{$geneid});
 
     #--- fill in the blank fields ----------
     if ($gName{$geneid}) {
 	$genename = $gName{$geneid};
     } else {
 	$genename = "N.A.";
-    }    
-    if ($gDes{$geneid}) {
-	$des = $gDes{$geneid};
-    } else {
-	$des = "N.A.";
     }
+    if ($gLName{$geneid}) {
+	$longname = $gLName{$geneid};
+    } else {
+	$longname = "N.A.";
+    }    
+    if ($gModID{$geneid}) {
+	$modID = $gModID{$geneid};
+    } else {
+	$modID = "N.A.";
+    }
+    if  ($gUniPro{$geneid}) {
+	$uniproID = $gUniPro{$geneid};
+    } else {
+	$uniproID = "N.A.";
+    }
+    if  ($gNCBI{$geneid}) {
+	$ncbiID = $gNCBI{$geneid};
+    } else {
+	$ncbiID = "N.A.";
+    }
+    if  ($gPANTHER{$geneid}) {
+	$pantherID = $gPANTHER{$geneid};
+    } else {
+	$pantherID = "N.A.";
+    }
+    if  ($gENSEM{$geneid}) {
+	$ensemblID = $gENSEM{$geneid};
+    } else {
+	$ensemblID = "N.A.";
+    }
+    if  ($gRefSeq{$geneid}) {
+	$refseqID = $gRefSeq{$geneid};
+    } else {
+	$refseqID = "N.A.";
+    }    
+    if ($gSYNO{$geneid}) {
+       $synonym = $gSYNO{$geneid};
+    } else {
+       $synonym = "N.A.";
+    }  
     if ($gSpe{$geneid}) {
 	$s = $gSpe{$geneid};
     } else {
 	$s = "N.A.";
 	print "ERROR! No species information for $geneid!\n";
     }
- 
-    if ($gGeneticInt{$geneid}) {
+   
+    #--- fill in the blank fields ----------
+     if ($gGeneticInt{$geneid}) {
 	$gIntDes = $gGeneticInt{$geneid};
     } else {
 	$gIntDes = "N.A.";
@@ -469,18 +433,8 @@ foreach $geneid (@geneList) {
 	$mIntDes = "N.A.";
     }
 
-    
-    $entrez = "N.A.";
-    print OUT "$geneid\t$gIntDes\t$mIntDes\n";
-    print NAM "$geneid\t$genename\t$s\t$entrez\n";
+    print OUT "$geneid\t$modID\t$genename\t$longname\t$s\t$ncbiID\t$ensemblID\t$uniproID\t$pantherID\t$refseqID\t$synonym\t$gIntDes\t$mIntDes\n";
+    #print NAM "$geneid\t$s\t$genename\t$longname\t$synonym\t$ncbiID\t$uniproID\t$ensemblID\t$pantherID\n";
 }
 close (OUT);
-close (NAM);
-
-print "Total Human Genes: $totalHumanGene\n";
-print "Total Mouse Genes: $totalMGIGene\n";
-print "Total Rat Genes: $totalRGDGene\n";
-print "Total Fish Genes: $totalZFINGene\n";
-print "Total Fly Genes: $totalFBGene\n";
-print "Total Worm Genes: $totalWBGene\n";
-print "Total Yeast Genes: $totalSGDGene\n";
+#close (NAM);
