@@ -142,7 +142,6 @@ while ($line = <XREF>) {
 close (XREF);
 #---------------------- Done with Cross Reference  --------------
 
-
 my %duplicateInfo; #check if the information was aready taken;
 my $checkstring;
 
@@ -247,19 +246,31 @@ print "Found Genetic interaction info for $totalGeneGInt genes.\n";
 
 
 #------------ Get Molecular Interaction -----------------
-my %gMolInt; #molecular interaction for each gene
+my %gMolInt; #molecular interaction for each gene, excluding protein-protein interaction
 open (MINT, "/home/wen/agrSimpleMine/src/molIntFile") || die "can't open molIntFile!";
+open (PINT, ">ppInteraction.csv") || die "can't open ppInteraction.csv!";
 my $mInteractor;
 
 my $totalGeneMInt = 0;
 
 while ($line = <MINT>) {
     chomp ($line);
-    next unless (($line =~ /^wormbase/) || ($line =~ /^flybase/)||($line =~ /^entrez/)||($line =~ /^uniprot/));
-
+    
     @tmp = ();
     @tmp = split /\t/, $line;
 
+    my $col = 0;
+    my $colName = "";
+    if ($tmp[0] =~ /interactor/) {
+	print PINT "$line\n";
+        foreach $colName (@tmp) {
+	    #print "$col $colName\n";
+	    $col++;
+	}     
+    }
+    
+    next unless (($line =~ /^wormbase/)||($line =~ /^flybase/)||($line =~ /^entrez/)||($line =~ /^uniprot/));
+    
     #convert the names into AGR ID
     $intA = "";
     $intB = "";
@@ -311,6 +322,14 @@ while ($line = <MINT>) {
     } 
     #----- done converting -------
 
+    my $type = "mol";
+    if (($tmp[20] =~ /protein/)&&($tmp[21] =~ /protein/)) {
+	$type = "PP";
+	print PINT "$line\n";
+    }
+
+    next unless ($type eq "mol");
+    
     #------ start to process interaction data -----
     
     next unless (($intA ne "")&&($intB ne ""));
@@ -318,12 +337,9 @@ while ($line = <MINT>) {
     $mInteractor = $intB;
     $checkstring = join "mInt", $geneid, $mInteractor;
     next unless !($duplicateInfo{$checkstring}); 
-    #if  ($geneid =~ /^FB/) {
-    #	print "$checkstring\n";
-    #}
     next unless $gName{$mInteractor}; #must be able to find interactor name
     $tempstring = join ":", $mInteractor, $gName{$mInteractor};
-    #$tempstring = $mInteractor;
+    
     if ($gMolInt{$geneid}) {
        $gMolInt{$geneid} =  join " \| ",  $gMolInt{$geneid}, $tempstring; 
     } else {
@@ -338,7 +354,7 @@ while ($line = <MINT>) {
     next unless !($duplicateInfo{$checkstring});
     next unless $gName{$mInteractor}; #must be able to find interactor name
     $tempstring = join ":", $mInteractor, $gName{$mInteractor};
-    #$tempstring = $mInteractor;
+
     if ($gMolInt{$geneid}) {
        $gMolInt{$geneid} =  join " \| ",  $gMolInt{$geneid}, $tempstring; 
     } else {
@@ -349,8 +365,110 @@ while ($line = <MINT>) {
     
 }    
 close (MINT);
+close (PINT);
 print "Found Molecular Interaction info for $totalGeneMInt genes.\n";
 #-------- Done getting molecular interaction ----
+
+
+#--------- Get Protein-Protein interaction ---
+open (MINT, "ppInteraction.csv") || die "can't open ppInteraction.csv!";
+$totalGeneMInt = 0;
+my %gPPInt; #protein-protein interaction for each gene
+
+while ($line = <MINT>) {
+    chomp ($line);
+#  next unless (($line =~ /^wormbase/)||($line =~ /^flybase/)||($line =~ /^entrez/)||($line =~ /^uniprot/));        
+    @tmp = ();
+    @tmp = split /\t/, $line;
+      
+    #convert the names into AGR ID
+    $intA = "";
+    $intB = "";
+    if (($line =~ /^wormbase/) || ($line =~ /^flybase/)) {
+       @splitName = ();
+       @splitName = split ":", $tmp[0];
+       if (($splitName[0]) =~ /flybase/) {
+		$splitName[0] = "FB";
+       } elsif  (($splitName[0]) =~ /wormbase/) {
+		$splitName[0] = "WB";
+       }	
+       $intA = join ":", @splitName;
+
+       @splitName = ();
+       @splitName = split ":", $tmp[1];
+       if (($splitName[0]) =~ /flybase/) {
+		$splitName[0] = "FB";
+       } elsif  (($splitName[0]) =~ /wormbase/) {
+		$splitName[0] = "WB";
+       }	
+       $intB = join ":", @splitName;
+
+    } elsif (($line =~ /^entrez/) || ($line =~ /^uniprot/)) {
+	# find $intA
+	($resource, $rID) = split ':', $tmp[0];
+	if ($line =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intA = $ncbiGene{$rID};
+	} else {
+	   # if  ($uniproGene{$rID}) {
+		#do nothing
+	   # } else {
+	   #	print "Cannot find gene id for Uniprot $rID!\n";
+	   # }
+	    next unless ($uniproGene{$rID});	
+	    $intA = $uniproGene{$rID};	    
+	    #print "UniProtKB:$rID mapped to $intA\n";
+	}
+	    
+	# find $intB
+	($resource, $rID) = split ':', $tmp[1];
+	if ($line =~ /^entrez/) {
+	    next unless ($ncbiGene{$rID});	
+	    $intB = $ncbiGene{$rID};
+	} else {
+	    next unless ($uniproGene{$rID});	
+	    $intB = $uniproGene{$rID};	    
+	}
+    } 
+    #----- done converting -------
+    
+    #------ start to process interaction data -----
+    
+    next unless (($intA ne "")&&($intB ne ""));
+    $geneid = $intA;
+    $mInteractor = $intB;
+    $checkstring = join "pInt", $geneid, $mInteractor; #protein-protein interaction
+    next unless !($duplicateInfo{$checkstring}); 
+    next unless $gName{$mInteractor}; #must be able to find interactor name
+    $tempstring = join ":", $mInteractor, $gName{$mInteractor};
+    
+    if ($gPPInt{$geneid}) {
+       $gPPInt{$geneid} =  join " \| ",  $gPPInt{$geneid}, $tempstring; 
+    } else {
+	$gPPInt{$geneid} = $tempstring;
+	$totalGeneMInt++;
+    }    
+    $duplicateInfo{$checkstring} = 1; #record this pair of genetic interaction
+
+    $geneid = $intB;
+    $mInteractor = $intA;  
+    $checkstring = join "pInt", $geneid, $mInteractor;
+    next unless !($duplicateInfo{$checkstring});
+    next unless $gName{$mInteractor}; #must be able to find interactor name
+    $tempstring = join ":", $mInteractor, $gName{$mInteractor};
+
+    if ($gPPInt{$geneid}) {
+       $gPPInt{$geneid} =  join " \| ",  $gPPInt{$geneid}, $tempstring; 
+    } else {
+	$gPPInt{$geneid} = $tempstring;
+	$totalGeneMInt++;
+    }    
+    $duplicateInfo{$checkstring} = 1; #record this pair of genetic interaction
+    
+}    
+close (MINT);
+print "Found Protein-Protein Interaction info for $totalGeneMInt genes.\n";
+#------ Done getting Protein-Protein interaction ----
 
 
 
@@ -360,9 +478,9 @@ print "Found Molecular Interaction info for $totalGeneMInt genes.\n";
 #print NAM "AGR Gene ID\tSpecies\tGene Name\tGene Symbol\tNCBI\tUniProt\tENSEMBL\tPANTHER\n";
 
 open (OUT, ">Interaction.csv") || die "cannot open Interaction.csv!\n";
-print OUT "AGR Gene ID\tMOD Gene ID\tGene Name\tGene Symbol\tSpecies\tNCBI ID\tEnsembl ID\tUniprot ID\tPanther ID\tRefSeq ID\tSynonym\tGenetic Interaction\tMolecular\/Physical Interaction\n";
+print OUT "AGR Gene ID\tMOD Gene ID\tGene Name\tGene Symbol\tSpecies\tNCBI ID\tEnsembl ID\tUniprot ID\tPanther ID\tRefSeq ID\tSynonym\tGenetic Interaction\tOther Molecular Interaction\tProtein-Protein Interaction\n";
 
-my ($gIntDes, $mIntDes);
+my ($gIntDes, $mIntDes, $pIntDes);
 my ($uniproID, $ncbiID, $pantherID, $ensemblID, $refseqID);
 
 foreach $geneid (@geneList) {
@@ -405,6 +523,7 @@ foreach $geneid (@geneList) {
     }
     if  ($gRefSeq{$geneid}) {
 	$refseqID = $gRefSeq{$geneid};
+	#print "$geneid\t$refseqID\n";
     } else {
 	$refseqID = "N.A.";
     }    
@@ -433,7 +552,16 @@ foreach $geneid (@geneList) {
 	$mIntDes = "N.A.";
     }
 
-    print OUT "$geneid\t$modID\t$genename\t$longname\t$s\t$ncbiID\t$ensemblID\t$uniproID\t$pantherID\t$refseqID\t$synonym\t$gIntDes\t$mIntDes\n";
+    if ($gPPInt{$geneid}) {
+	$pIntDes = $gPPInt{$geneid};
+	if ($geneid =~ /WBGene/) {
+	    print "$geneid has ppInt $pIntDes\n";
+	}
+    } else {
+	$pIntDes = "N.A.";
+    }
+    
+    print OUT "$geneid\t$modID\t$genename\t$longname\t$s\t$ncbiID\t$ensemblID\t$uniproID\t$pantherID\t$refseqID\t$synonym\t$gIntDes\t$mIntDes\t$pIntDes\n";
     #print NAM "$geneid\t$s\t$genename\t$longname\t$synonym\t$ncbiID\t$uniproID\t$ensemblID\t$pantherID\n";
 }
 close (OUT);

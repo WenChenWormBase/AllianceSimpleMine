@@ -22,7 +22,7 @@ my $checkstring;
 
 #------------ Get Gene Identifers and Interaction -----------------
 open (INT, "Interaction.csv") || die "can't open Interaction.csv!";
-my ($geneid, $modID, $genename, $longname, $s, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $gIntDes, $mIntDes);
+my ($geneid, $modID, $genename, $longname, $s, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $gIntDes, $mIntDes, $pIntDes);
 my $i = 0; #this index geneList
 my $totalGenes;
 my @geneList;
@@ -42,13 +42,14 @@ foreach $s (@spe) {
     $totalSpeGene{$s} = 0;
 }
 my %gGeneticInt; #genetic interaction for each gene
-my %gMolInt; #molecular interaction for each gene
+my %gMolInt; #other molecular interaction for each gene
+my %gPPInt; #protein-protein interaction for each gene
 
 $line = <INT>;
 while ($line = <INT>) {
     chomp ($line);
     @tmp = ();
-    ($geneid, $modID, $genename, $longname, $s, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $gIntDes, $mIntDes) = split /\t/, $line;
+    ($geneid, $modID, $genename, $longname, $s, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $gIntDes, $mIntDes, $pIntDes) = split /\t/, $line;
     $geneList[$i] = $geneid; #add this gene to gene list.
     $i++;    
     $gModID{$geneid} = $modID;
@@ -63,7 +64,8 @@ while ($line = <INT>) {
     $gRefSeq{$geneid} = $refseqID;
     $gGeneticInt{$geneid} = $gIntDes;
     $gMolInt{$geneid} = $mIntDes;   
-
+    $gPPInt{$geneid} = $pIntDes;
+    
     foreach $s (@spe) {
 	if ($s eq "$gSpe{$geneid}") {#this gene matches this species
 	    $totalSpeGene{$s}++;
@@ -291,7 +293,7 @@ close (EXP);
 
 #---- print headers ------------
 #my $header = "Gene ID\tGene Symbol\tGene Name\tDescription\tSpecies\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID\tSynonym\tDisease Association\tExpression Location\tExpression Stage\tVariants\tGenetic Interaction\tMolecular\/Physical Interaction\tHuman Ortholog\tMouse Ortholog\tRat Ortholog\tFish Ortholog\tFly Ortholog\tWorm Ortholog\tYeast Ortholog";
-my $header = "Gene ID\tGene Symbol\tGene Name\tDescription\tSpecies\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID\tRefSeq ID\tSynonym\tDisease Association\tExpression Location\tExpression Stage\tVariants\tGenetic Interaction\tMolecular\/Physical Interaction\tHomo sapiens Ortholog\tMus musculus Ortholog\tRattus norvegicus Ortholog\tDanio rerio Ortholog\tDrosophila melanogaster Ortholog\tCaenorhabditis elegans Ortholog\tSaccharomyces cerevisiae Ortholog\tXenopus laevis Ortholog\tXenopus tropicalis Ortholog";
+my $header = "Gene ID\tGene Symbol\tGene Name\tDescription\tSpecies\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID\tRefSeq ID\tSynonym\tDisease Association\tExpression Location\tExpression Stage\tVariants\tGenetic Interaction\tProtein-Protein Interaction\tOther Molecular Interaction\tHomo sapiens Ortholog\tMus musculus Ortholog\tRattus norvegicus Ortholog\tDanio rerio Ortholog\tDrosophila melanogaster Ortholog\tCaenorhabditis elegans Ortholog\tSaccharomyces cerevisiae Ortholog\tXenopus laevis Ortholog\tXenopus tropicalis Ortholog";
 
 my $nameHeader = "Gene ID\tGene Symbol\tGene Name\tMOD ID\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID\tRefSeq ID\tSynonym";
 
@@ -500,6 +502,13 @@ foreach $geneid (@geneList) {
     } else {
     	$gIntDes = "N.A.";
     }
+
+    if ($gPPInt{$geneid}) {
+    	$pIntDes = $gPPInt{$geneid};
+    } else {
+    	$pIntDes = "N.A.";
+    }
+     
     if ($gMolInt{$geneid}) {
     	$mIntDes = $gMolInt{$geneid};
     } else {
@@ -508,7 +517,7 @@ foreach $geneid (@geneList) {
    
     #print species specific source data
 #my $header = "AGR Gene ID\tAGR Gene Name\tDescription\tSpecies\t\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID\tDisease Association\tExpression Location\tExpression Stage\tVariants\tGenetic Interaction\tMolecular\/Physical Interaction\tHuman Ortholog\tMouse Ortholog\tRat Ortholog\tFish Ortholog\tFly Ortholog\tWorm Ortholog\tYeast Ortholog";   
-    my $dataline = join "\t", $geneid, $genename, $longname, $des, $speMod{$s}, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $diseaseDes, $exprLocDes, $exprStaDes, $varDes, $gIntDes, $mIntDes, $humanOrtho, $mouseOrtho, $ratOrtho, $fishOrtho, $flyOrtho, $wormOrtho, $yeastOrtho, $xbxlOrtho, $xbxtOrtho;
+    my $dataline = join "\t", $geneid, $genename, $longname, $des, $speMod{$s}, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym, $diseaseDes, $exprLocDes, $exprStaDes, $varDes, $gIntDes, $pIntDes, $mIntDes, $humanOrtho, $mouseOrtho, $ratOrtho, $fishOrtho, $flyOrtho, $wormOrtho, $yeastOrtho, $xbxlOrtho, $xbxtOrtho;
 
 #my $nameHeader = "AGR Gene ID\tAGR Gene Name\tMOD ID\tNCBI ID\tENSEMBL ID\tUniProtKB ID\tPANTHER ID";
     my $nameline = join "\t", $geneid, $genename, $longname, $modID, $ncbiID, $ensemblID, $uniproID, $pantherID, $refseqID, $synonym;

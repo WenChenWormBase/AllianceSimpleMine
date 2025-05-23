@@ -1,3 +1,3 @@
 Name Identifiers, Species, Description	Gene ID	Gene Symbol	Gene Name	Description	Species	NCBI ID	ENSEMBL ID	UniProtKB ID	PANTHER ID	RefSeq ID	Synonym
-Experimental Results	Disease Association	Expression Location	Expression Stage	Variants	Genetic Interaction	Molecular/Physical Interaction
+Experimental Results	Disease Association	Expression Location	Expression Stage	Variants	Genetic Interaction	Protein-Protein Interaction	Other Molecular Interaction
 Orthologs	Homo sapiens Ortholog		Mus musculus Ortholog	Rattus norvegicus Ortholog		Danio rerio Ortholog	Drosophila melanogaster Ortholog	Caenorhabditis elegans Ortholog	Saccharomyces cerevisiae Ortholog	Xenopus laevis Ortholog	Xenopus tropicalis Ortholog
